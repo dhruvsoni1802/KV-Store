@@ -12,6 +12,7 @@ class VersionedValueResponse(BaseModel):
     value: Any
     version: int
     timestamp: float
+    source: str  # "cache" or "database"
 
 
 class PutResponse(BaseModel):

@@ -19,11 +19,12 @@ class VersionedValue:
             'timestamp': self.timestamp
         }
     
-    def to_pydantic(self) -> VersionedValueResponse:
+    def to_pydantic(self, source: str = "cache") -> VersionedValueResponse:
         return VersionedValueResponse(
             value=self.value,
             version=self.version,
-            timestamp=self.timestamp
+            timestamp=self.timestamp,
+            source=source
         )
 
 
@@ -95,11 +96,11 @@ class VersionedKeyValueStore:
                 
                 if version is None:
                     latest = versions[-1]
-                    return latest.to_pydantic()
+                    return latest.to_pydantic(source="cache")
                 else:
                     for v in versions:
                         if v.version == version:
-                            return v.to_pydantic()
+                            return v.to_pydantic(source="cache")
                     # Cache miss for specific version, try database
                     return self._get_from_database(key, version)
             
@@ -117,38 +118,38 @@ class VersionedKeyValueStore:
         
         # Convert to VersionedValueResponse
         # Ensure version is not None
-        version = db_result['version']
-        if version is None:
-            version = 1  # Default to version 1 if None
+        db_version = db_result['version']
+        if db_version is None:
+            db_version = 1  # Default to version 1 if None
         
         versioned_response = VersionedValueResponse(
             value=db_result['value'],
-            version=version,
-            timestamp=db_result['timestamp']
+            version=db_version,
+            timestamp=db_result['timestamp'],
+            source="database"
         )
         
-        # Optionally add to cache if we have space (cache-aside pattern)
-        # Only add if cache is not full or if it's the latest version
-        if version is None:
-            current_time = time.time()
-            
-            # Check if we need to evict before adding
-            if key not in self._store and self._should_evict():
-                self._evict_lru()
-            
-            # Add to cache
-            versioned_value = VersionedValue(
-                value=db_result['value'],
-                version=version  # Use the validated version
-            )
-            versioned_value.timestamp = db_result['timestamp']  # Preserve original timestamp
-            
-            if key in self._store:
-                self._store[key].append(versioned_value)
-            else:
-                self._store[key] = [versioned_value]
-            
-            self._access_times[key] = current_time
+        # Add to cache if we have space (cache-aside pattern)
+        # Only add if requesting latest version (version is None) or specific version
+        current_time = time.time()
+        
+        # Check if we need to evict before adding
+        if key not in self._store and self._should_evict():
+            self._evict_lru()
+        
+        # Add to cache
+        versioned_value = VersionedValue(
+            value=db_result['value'],
+            version=db_version
+        )
+        versioned_value.timestamp = db_result['timestamp']  # Preserve original timestamp
+        
+        if key in self._store:
+            self._store[key].append(versioned_value)
+        else:
+            self._store[key] = [versioned_value]
+        
+        self._access_times[key] = current_time
         
         return versioned_response
     

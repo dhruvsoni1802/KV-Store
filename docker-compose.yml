@@ -1,0 +1,35 @@
+version: '3.8'
+
+services:
+  # API Gateway - Entry point for all requests
+  api-gateway:
+    build:
+      context: .
+      dockerfile: gateway/Dockerfile
+    ports:
+      - "8000:8000"
+    depends_on:
+      - server-1
+    restart: unless-stopped
+    environment:
+      - PYTHONUNBUFFERED=1
+    networks:
+      - kv-store-network
+
+  # Server instances - Can be scaled independently
+  server-1:
+    build:
+      context: .
+      dockerfile: server/Dockerfile
+    # No ports exposed - only accessible through API Gateway
+    volumes:
+      - ./data:/app/data
+    restart: unless-stopped
+    environment:
+      - PYTHONUNBUFFERED=1
+    networks:
+      - kv-store-network
+
+networks:
+  kv-store-network:
+    driver: bridge
