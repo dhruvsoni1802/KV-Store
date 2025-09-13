@@ -1,0 +1,19 @@
+all:
+  children:
+    gateway:
+      hosts:
+        gateway-server:
+          ansible_host: 192.168.1.100  # Replace with your gateway server IP
+          ansible_user: ubuntu
+          ansible_ssh_private_key_file: ~/.ssh/id_rsa
+    
+    servers:
+      hosts:
+        server-1:
+          ansible_host: 192.168.1.101  # Replace with your first server IP
+          ansible_user: ubuntu
+          ansible_ssh_private_key_file: ~/.ssh/id_rsa
+        server-2:
+          ansible_host: 192.168.1.102  # Replace with your second server IP
+          ansible_user: ubuntu
+          ansible_ssh_private_key_file: ~/.ssh/id_rsa
