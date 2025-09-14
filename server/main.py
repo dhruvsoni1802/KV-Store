@@ -14,13 +14,6 @@ app = FastAPI(
 # Include routes
 app.include_router(router)
 
-# Health check endpoint
-@app.get("/health")
-async def health_check():
-    """Health check for the server instance"""
-    return {"status": "healthy", "service": "kv-store-server"}
-
-
 def main():
     print("Starting key-value store server...")
     print("Server will run at http://localhost:8080")

@@ -8,10 +8,10 @@ COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
 # Copy the gateway code
-COPY gateway/ ./gateway/
+COPY gateway/ ./
 
 # Expose port
 EXPOSE 8000
 
 # Run the API Gateway
-CMD ["python", "gateway/main.py"]
+CMD ["python", "main.py"]

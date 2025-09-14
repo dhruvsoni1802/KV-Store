@@ -1,0 +1,102 @@
+- name: Setup Gateway Server
+  hosts: gateway
+  become: yes
+  tasks:
+    - name: Install Docker
+      apt:
+        name: docker.io
+        state: present
+        update_cache: yes
+
+    - name: Start Docker
+      service:
+        name: docker
+        state: started
+        enabled: yes
+
+    - name: Copy gateway files
+      copy:
+        src: ../../gateway/
+        dest: /opt/gateway/gateway/
+
+    - name: Copy requirements
+      copy:
+        src: ../../requirements.txt
+        dest: /opt/gateway/
+
+    - name: Build gateway image
+      docker_image:
+        name: kv-gateway
+        build:
+          path: /opt/gateway
+        source: build
+
+    - name: Run gateway container
+      docker_container:
+        name: kv-gateway
+        image: kv-gateway
+        ports:
+          - "8000:8000"
+        env:
+          BACKEND_SERVERS: "{{ groups['servers'] | map('extract', hostvars, 'ansible_host') | map('regex_replace', '(.*)', '\\1:8080') | join(',') }}"
+        restart_policy: unless-stopped
+
+- name: Setup Backend Servers
+  hosts: servers
+  become: yes
+  tasks:
+    - name: Install Docker
+      apt:
+        name: docker.io
+        state: present
+        update_cache: yes
+
+    - name: Start Docker
+      service:
+        name: docker
+        state: started
+        enabled: yes
+
+    - name: Copy server files
+      copy:
+        src: ../../server/
+        dest: /opt/server/server/
+
+    - name: Copy requirements
+      copy:
+        src: ../../requirements.txt
+        dest: /opt/server/
+
+    - name: Create data directory
+      file:
+        path: /opt/server/data
+        state: directory
+
+    - name: Build server image
+      docker_image:
+        name: kv-server
+        build:
+          path: /opt/server
+        source: build
+
+    - name: Run server container
+      docker_container:
+        name: kv-server
+        image: kv-server
+        ports:
+          - "8080:8080"
+        volumes:
+          - /opt/server/data:/app/data
+        restart_policy: unless-stopped
+    
+    - name: Block external access to server port
+      ufw:
+        rule: deny
+        port: '8080'
+        src: '0.0.0.0/0'
+        
+    - name: Allow gateway access to servers
+      ufw:
+        rule: allow
+        port: '8080'
+        src: "{{ hostvars[groups['gateway'][0]]['ansible_host'] }}"

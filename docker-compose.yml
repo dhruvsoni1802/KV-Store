@@ -13,6 +13,7 @@ services:
     restart: unless-stopped
     environment:
       - PYTHONUNBUFFERED=1
+      - BACKEND_SERVERS=server-1:8080
     networks:
       - kv-store-network
 

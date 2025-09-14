@@ -4,6 +4,8 @@ from fastapi import FastAPI, Request, HTTPException
 from fastapi.responses import JSONResponse
 import httpx
 import uvicorn
+import os
+import random
 
 app = FastAPI(
     title="API Gateway",
@@ -11,13 +13,20 @@ app = FastAPI(
     version="1.0.0"
 )
 
-# Configuration - where our backend server is running
-BACKEND_URL = "http://server-1:8080"
+# Configuration - get backend servers from environment variable
+BACKEND_SERVERS = os.getenv("BACKEND_SERVERS", "localhost:8080").split(",")
+print(f"Backend servers configured: {BACKEND_SERVERS}")
+
+def get_backend_url():
+    """Get a random backend server URL for load balancing"""
+    server = random.choice(BACKEND_SERVERS).strip()
+    return f"http://{server}"
 
 @app.api_route("/{path:path}", methods=["GET", "POST", "PUT", "DELETE"])
 async def forward_request(request: Request, path: str):    
     # Build the full URL for the backend
-    target_url = f"{BACKEND_URL}/{path}"
+    backend_url = get_backend_url()
+    target_url = f"{backend_url}/{path}"
 
     # Get all the request details
     method = request.method
@@ -72,9 +81,10 @@ async def forward_request(request: Request, path: str):
 def main():
     print("🚀 Starting API Gateway...")
     print(f"📍 Gateway URL: http://localhost:8000")
-    print(f"🔗 Backend URL: {BACKEND_URL}")
+    print(f"🔗 Backend Servers: {BACKEND_SERVERS}")
     print("⏹️  Press Ctrl+C to stop")
     
+    #Host is 0.0.0.0 to allow external access
     uvicorn.run(app, host="0.0.0.0", port=8000)
 
 if __name__ == '__main__':

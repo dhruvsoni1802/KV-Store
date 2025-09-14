@@ -10,6 +10,7 @@ from pathlib import Path
 class DatabaseLayer:  
     def __init__(self, db_path: str = "/app/data/kv_store.db"):
         self.db_path = db_path
+        
         # Ensure the data directory exists
         Path(self.db_path).parent.mkdir(parents=True, exist_ok=True)
         self._init_database()

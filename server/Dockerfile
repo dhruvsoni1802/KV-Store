@@ -8,7 +8,7 @@ COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
 # Copy the server code
-COPY server/ ./server/
+COPY server/ ./
 
 # Create data directory
 RUN mkdir -p /app/data
@@ -17,4 +17,4 @@ RUN mkdir -p /app/data
 EXPOSE 8080
 
 # Run the server
-CMD ["python", "server/main.py"]
+CMD ["python", "main.py"]
