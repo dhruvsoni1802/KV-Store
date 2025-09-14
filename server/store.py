@@ -29,16 +29,20 @@ class VersionedValue:
 
 
 class VersionedKeyValueStore:  
-    def __init__(self, max_cache_size: int = 100, database=None):
+    def __init__(self, max_cache_size: int = 100, database=None, expiration_minutes: int = 30):
         self._store: Dict[str, List[VersionedValue]] = {}
         self._lock = threading.RLock()
         self.max_cache_size = max_cache_size
         self._access_times: Dict[str, float] = {}
         self.database = database
+        self.expiration_seconds = expiration_minutes * 60  # Convert minutes to seconds
     
     def put(self, key: str, value: Any) -> PutResponse:
         with self._lock:
             current_time = time.time()
+            
+            # Clean up expired items first
+            self._cleanup_expired_items()
             
             # Write to database first (write-through)
             if self.database:
@@ -87,6 +91,9 @@ class VersionedKeyValueStore:
     
     def get(self, key: str, version: Optional[int] = None) -> Optional[VersionedValueResponse]:
         with self._lock:
+            # Clean up expired items first
+            self._cleanup_expired_items()
+            
             # First, try to get from cache
             if key in self._store:
                 # Update access time for LRU
@@ -142,7 +149,8 @@ class VersionedKeyValueStore:
             value=db_result['value'],
             version=db_version
         )
-        versioned_value.timestamp = db_result['timestamp']  # Preserve original timestamp
+        # Use current time for cache expiration, not original DB timestamp
+        versioned_value.timestamp = current_time
         
         if key in self._store:
             self._store[key].append(versioned_value)
@@ -152,6 +160,24 @@ class VersionedKeyValueStore:
         self._access_times[key] = current_time
         
         return versioned_response
+    
+    def _is_expired(self, timestamp: float) -> bool:
+        current_time = time.time()
+        return (current_time - timestamp) > self.expiration_seconds
+    
+    def _cleanup_expired_items(self) -> None:
+        current_time = time.time()
+        expired_keys = []
+        
+        for key, versions in self._store.items():
+            if versions and self._is_expired(versions[-1].timestamp):
+                expired_keys.append(key)
+        
+        # Remove expired keys
+        for key in expired_keys:
+            del self._store[key]
+            if key in self._access_times:
+                del self._access_times[key]
     
     def _should_evict(self) -> bool:
         return len(self._store) >= self.max_cache_size
@@ -169,10 +195,22 @@ class VersionedKeyValueStore:
         
         return lru_key
     
+    def cleanup_expired(self) -> int:
+        """Manually trigger cleanup of expired items. Returns number of items removed."""
+        with self._lock:
+            before_count = len(self._store)
+            self._cleanup_expired_items()
+            after_count = len(self._store)
+            return before_count - after_count
+    
     def get_cache_stats(self) -> Dict[str, Any]:
         with self._lock:
+            # Clean up expired items before returning stats
+            self._cleanup_expired_items()
+            
             return {
                 'current_size': len(self._store),
                 'max_size': self.max_cache_size,
-                'is_full': self._should_evict()
+                'is_full': self._should_evict(),
+                'expiration_minutes': self.expiration_seconds // 60
             }
