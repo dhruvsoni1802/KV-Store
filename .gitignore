@@ -7,8 +7,4 @@ data/
 deploy/ansible.cfg
 
 #Ansible inventory file
-<<<<<<< HEAD
 deploy/ansible/inventory.yaml
-=======
-deploy/ansible/inventory.yaml
->>>>>>> 506470a5b084d4714cf75a25c7392d4ec7924a8d
