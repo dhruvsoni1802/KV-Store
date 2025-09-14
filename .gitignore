@@ -6,6 +6,5 @@ data/
 #Ansible config file
 deploy/ansible.cfg
 
-
 #Ansible inventory file
 deploy/ansible/inventory.yaml
