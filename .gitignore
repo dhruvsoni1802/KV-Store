@@ -5,3 +5,6 @@ data/
 
 #Ansible config file
 ansible.cfg
+
+#Ansible inventory file
+ansible/inventory.yaml

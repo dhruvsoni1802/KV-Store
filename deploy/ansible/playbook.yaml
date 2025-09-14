@@ -14,6 +14,11 @@
         state: started
         enabled: yes
 
+    - name: Copy gateway Dockerfile
+      copy:
+        src: ../../gateway/Dockerfile
+        dest: /opt/gateway/
+
     - name: Copy gateway files
       copy:
         src: ../../gateway/
@@ -31,6 +36,22 @@
           path: /opt/gateway
         source: build
 
+    - name: Debug backend servers list
+      debug:
+        msg: "Backend servers will be: {{ groups['servers'] | map('extract', hostvars, 'ansible_host') | list }}"
+
+    - name: Set backend servers variable
+      set_fact:
+        backend_servers_list: "{{ groups['servers'] | map('extract', hostvars, 'ansible_host') | list }}"
+
+    - name: Build backend servers string
+      set_fact:
+        backend_servers_string: "{{ backend_servers_list | map('regex_replace', '^(.*)$', '\\1:8080') | join(',') }}"
+
+    - name: Debug final backend servers string
+      debug:
+        msg: "Final BACKEND_SERVERS will be: {{ backend_servers_string }}"
+
     - name: Run gateway container
       docker_container:
         name: kv-gateway
@@ -38,7 +59,7 @@
         ports:
           - "8000:8000"
         env:
-          BACKEND_SERVERS: "{{ groups['servers'] | map('extract', hostvars, 'ansible_host') | map('regex_replace', '(.*)', '\\1:8080') | join(',') }}"
+          BACKEND_SERVERS: "{{ backend_servers_string }}"
         restart_policy: unless-stopped
 
 - name: Setup Backend Servers
@@ -56,6 +77,11 @@
         name: docker
         state: started
         enabled: yes
+
+    - name: Copy server Dockerfile
+      copy:
+        src: ../../server/Dockerfile
+        dest: /opt/server/
 
     - name: Copy server files
       copy:
@@ -89,6 +115,17 @@
           - /opt/server/data:/app/data
         restart_policy: unless-stopped
     
+    - name: Install UFW
+      apt:
+        name: ufw
+        state: present
+        update_cache: yes
+
+    - name: Enable UFW
+      ufw:
+        state: enabled
+        policy: deny
+
     - name: Block external access to server port
       ufw:
         rule: deny
