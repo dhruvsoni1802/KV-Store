@@ -36,10 +36,6 @@
           path: /opt/gateway
         source: build
 
-    - name: Debug backend servers list
-      debug:
-        msg: "Backend servers will be: {{ groups['servers'] | map('extract', hostvars, 'ansible_host') | list }}"
-
     - name: Set backend servers variable
       set_fact:
         backend_servers_list: "{{ groups['servers'] | map('extract', hostvars, 'ansible_host') | list }}"
@@ -48,9 +44,30 @@
       set_fact:
         backend_servers_string: "{{ backend_servers_list | map('regex_replace', '^(.*)$', '\\1:8080') | join(',') }}"
 
-    - name: Debug final backend servers string
+    - name: Final backend servers string
       debug:
         msg: "Final BACKEND_SERVERS will be: {{ backend_servers_string }}"
+
+    - name: Stop existing gateway container
+      docker_container:
+        name: kv-gateway
+        state: absent
+      ignore_errors: yes
+
+    - name: Remove any containers using port 8000
+      shell: docker ps -a --filter "publish=8000" -q | xargs -r docker rm -f
+      ignore_errors: yes
+
+    - name: Kill any process using port 8000
+      shell: lsof -ti:8000 | xargs -r kill -9
+      ignore_errors: yes
+
+    - name: Wait for port to be released
+      wait_for:
+        port: 8000
+        state: stopped
+        timeout: 10
+      ignore_errors: yes
 
     - name: Run gateway container
       docker_container:
@@ -93,10 +110,10 @@
         src: ../../requirements.txt
         dest: /opt/server/
 
-    - name: Create data directory
-      file:
-        path: /opt/server/data
-        state: directory
+    - name: Create Docker volume for server data
+      docker_volume:
+        name: kv-server-data
+        driver: local
 
     - name: Build server image
       docker_image:
@@ -105,6 +122,27 @@
           path: /opt/server
         source: build
 
+    - name: Stop existing server container
+      docker_container:
+        name: kv-server
+        state: absent
+      ignore_errors: yes
+
+    - name: Remove any containers using port 8080
+      shell: docker ps -a --filter "publish=8080" -q | xargs -r docker rm -f
+      ignore_errors: yes
+
+    - name: Kill any process using port 8080
+      shell: lsof -ti:8080 | xargs -r kill -9
+      ignore_errors: yes
+
+    - name: Wait for port 8080 to be released
+      wait_for:
+        port: 8080
+        state: stopped
+        timeout: 10
+      ignore_errors: yes
+
     - name: Run server container
       docker_container:
         name: kv-server
@@ -112,7 +150,7 @@
         ports:
           - "8080:8080"
         volumes:
-          - /opt/server/data:/app/data
+          - kv-server-data:/app/data
         restart_policy: unless-stopped
     
     - name: Install UFW
