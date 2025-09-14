@@ -4,7 +4,8 @@
 data/
 
 #Ansible config file
-ansible.cfg
+deploy/ansible.cfg
+
 
 #Ansible inventory file
-ansible/inventory.yaml
+deploy/ansible/inventory.yaml
