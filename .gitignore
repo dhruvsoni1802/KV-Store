@@ -2,3 +2,6 @@
 
 # Data directory for persistent storage
 data/
+
+#Ansible config file
+ansible.cfg
