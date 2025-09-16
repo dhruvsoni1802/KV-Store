@@ -5,7 +5,9 @@ from fastapi.responses import JSONResponse
 import httpx
 import uvicorn
 import os
+import time
 from load_balancer import LoadBalancer
+from monitoring import get_insights, update_metrics, ServerMetrics
 
 app = FastAPI(
     title="API Gateway",
@@ -28,44 +30,63 @@ async def get_servers():
         "count": len(BACKEND_SERVERS)
     }
 
+@app.get("/insights")
+async def get_load_balancer_insights():
+    # Get metrics from load balancer
+    lb_metrics = load_balancer.get_server_metrics()
+    
+    # Create simple metrics for each server
+    server_metrics_list = []
+    for server in BACKEND_SERVERS:
+        lb_data = lb_metrics.get(server, {"request_count": 0, "avg_latency_ms": 0})
+        
+        # Simple mock CPU/memory data
+        cpu_percent = 50.0
+        memory_percent = 60.0
+        
+        server_metrics = ServerMetrics(
+            server_name=server,
+            request_count=lb_data["request_count"],
+            avg_latency_ms=lb_data["avg_latency_ms"],
+            cpu_usage_percent=cpu_percent,
+            memory_usage_percent=memory_percent
+        )
+        server_metrics_list.append(server_metrics)
+    
+    # Update and return insights
+    update_metrics(server_metrics_list)
+    return get_insights()
+
 @app.api_route("/{path:path}", methods=["GET", "POST", "PUT", "DELETE"])
 async def forward_request(request: Request, path: str):    
+    start_time = time.time()
+    
     try:
-        # Check for server parameter in query params
+        # Get server from load balancer
         server_param = request.query_params.get("server")
-        
-        # Build the full URL for the backend using consistent hashing
         backend_url = load_balancer.get_backend_url(path, server_param)
         target_url = f"{backend_url}/{path}"
     except Exception as e:
         raise HTTPException(status_code=503, detail=f"No servers available: {str(e)}")
     
-    # Extract server name for response headers
     server_name = backend_url.replace("http://", "")
 
-    # Get all the request details
-    method = request.method
-    headers = dict(request.headers)
-    headers.pop("host", None)
-    params = dict(request.query_params)
-    
-    # Get request body for POST/PUT requests
-    body = None
-    if method in ["POST", "PUT"]:
-        body = await request.body()
-    
+    # Make request to backend
     try:
-        # Make the request to the backend server
         async with httpx.AsyncClient(timeout=30.0) as client:
             response = await client.request(
-                method=method,
+                method=request.method,
                 url=target_url,
-                headers=headers,
-                params=params,
-                content=body
+                headers=dict(request.headers),
+                params=dict(request.query_params),
+                content=await request.body() if request.method in ["POST", "PUT"] else None
             )
             
-            # Forward the response back to the client with server info
+            # Record metrics
+            latency_ms = (time.time() - start_time) * 1000
+            load_balancer.record_request(server_name, latency_ms)
+            
+            # Return response with server info
             response_headers = dict(response.headers)
             response_headers["X-Server-Used"] = server_name
             
@@ -74,37 +95,17 @@ async def forward_request(request: Request, path: str):
             
             if response.headers.get("content-type", "").startswith("application/json"):
                 json_content = response.json()
-                # Add server info to JSON response
                 if isinstance(json_content, dict):
                     json_content["server_used"] = server_name
-                
-                return JSONResponse(
-                    content=json_content,
-                    status_code=response.status_code,
-                    headers=response_headers
-                )
+                return JSONResponse(content=json_content, status_code=response.status_code, headers=response_headers)
             else:
-                return JSONResponse(
-                    content=response.text,
-                    status_code=response.status_code,
-                    headers=response_headers
-                )
+                return JSONResponse(content=response.text, status_code=response.status_code, headers=response_headers)
             
-    except httpx.ConnectError:
-        raise HTTPException(
-            status_code=503, 
-            detail="Backend service is unavailable"
-        )
-    except httpx.TimeoutException:
-        raise HTTPException(
-            status_code=504, 
-            detail="Backend service timed out"
-        )
     except Exception as e:
-        raise HTTPException(
-            status_code=500, 
-            detail=f"Gateway error: {str(e)}"
-        )
+        # Record failed request
+        latency_ms = (time.time() - start_time) * 1000
+        load_balancer.record_request(server_name, latency_ms)
+        raise HTTPException(status_code=500, detail=f"Gateway error: {str(e)}")
 
 def main():
     print("🚀 Starting API Gateway...")

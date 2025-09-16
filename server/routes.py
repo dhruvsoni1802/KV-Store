@@ -2,6 +2,7 @@
 
 from typing import Optional
 from fastapi import APIRouter, HTTPException, Query
+import psutil
 from models import PutRequest, PutResponse, VersionedValueResponse
 from store import VersionedKeyValueStore
 from database import DatabaseLayer
@@ -40,4 +41,14 @@ async def get_cache_stats():
 @router.get("/db/stats")
 async def get_db_stats():
     return db.get_stats()
+
+
+@router.get("/system/stats")
+async def get_system_stats():
+    """Get system resource usage stats"""
+    return {
+        "cpu_percent": psutil.cpu_percent(interval=1),
+        "memory_percent": psutil.virtual_memory().percent,
+        "disk_percent": psutil.disk_usage('/').percent
+    }
 

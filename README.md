@@ -7,6 +7,8 @@ A distributed FastAPI-based REST API for a versioned key-value store with API Ga
 - **Distributed Architecture**: API Gateway + Multiple Backend Servers with load balancing
 - **Consistent Hashing**: Key-based routing with SHA-256 hashing and virtual nodes
 - **Load Balancing**: Intelligent request distribution across backend servers
+- **Real-time Metrics**: Automatic collection of request counts, latency, and performance data
+- **Load Monitoring**: Insights into server performance, hot spots, and bottlenecks
 - **Versioned Storage**: Each key can have multiple versions with automatic versioning
 - **LRU Cache**: In-memory cache with configurable size limit per server
 - **Data Persistence**: SQLite database for durability with per-server isolation
@@ -22,8 +24,9 @@ Key - value store/
 ├── gateway/                    # API Gateway service
 │   ├── __init__.py
 │   ├── main.py                # API Gateway entry point
-│   ├── load_balancer.py       # Load balancing logic
+│   ├── load_balancer.py       # Load balancing logic with metrics
 │   ├── consistent_hash.py     # Consistent hashing implementation
+│   ├── monitoring.py          # Metrics collection and insights
 │   └── Dockerfile             # Gateway container config
 ├── server/                    # Backend server service
 │   ├── __init__.py
@@ -232,6 +235,10 @@ python3 clean_databases.py --confirm
 ### Server Information
 - `GET /servers` - Get list of available backend servers
 
+### Load Balancer Monitoring
+- `GET /insights` - Get comprehensive load balancer metrics and insights
+  - Returns: Request counts, latency data, hot spots, slow servers, and recommendations
+
 ### Interactive Documentation
 - `GET /docs` - Swagger UI for testing the API
 
@@ -270,9 +277,74 @@ curl "http://localhost:8000/db/stats?server=server-1:8080"
 
 # Check database statistics from server-2 through API Gateway
 curl "http://localhost:8000/db/stats?server=server-2:8080"
+
+# Get load balancer insights and metrics
+curl "http://localhost:8000/insights"
 ```
 
 **Note: Backend server is not directly accessible. All requests must go through the API Gateway.**
+
+## Load Balancer Monitoring
+
+The system automatically collects metrics for each server:
+
+### Metrics Collected
+- **Request Count**: Number of requests handled by each server
+- **Latency**: Average response time (in milliseconds) for each server
+- **Hot Spots**: Servers handling 50%+ more requests than average
+- **Slow Servers**: Servers with 50%+ higher latency than average
+
+### Sample Insights Response
+```json
+{
+  "total_requests": 150,
+  "avg_latency_ms": 45.2,
+  "hot_spots": ["server-3"],
+  "slow_servers": ["server-2"],
+  "servers": {
+    "server-1:8080": {
+      "requests": 50,
+      "latency_ms": 40.5,
+      "cpu_percent": 50.0,
+      "memory_percent": 60.0
+    },
+    "server-2:8080": {
+      "requests": 30,
+      "latency_ms": 80.2,
+      "cpu_percent": 50.0,
+      "memory_percent": 60.0
+    },
+    "server-3:8080": {
+      "requests": 70,
+      "latency_ms": 35.1,
+      "cpu_percent": 50.0,
+      "memory_percent": 60.0
+    }
+  }
+}
+```
+
+### Testing the Monitoring System
+
+1. **Start the system**:
+   ```bash
+   docker-compose up -d
+   ```
+
+2. **Generate some load**:
+   ```bash
+   # Make several requests to generate metrics
+   curl -X PUT "http://localhost:8000/put/key1" -H "Content-Type: application/json" -d '{"value": "value1"}'
+   curl -X PUT "http://localhost:8000/put/key2" -H "Content-Type: application/json" -d '{"value": "value2"}'
+   curl -X PUT "http://localhost:8000/put/key3" -H "Content-Type: application/json" -d '{"value": "value3"}'
+   curl "http://localhost:8000/get/key1"
+   curl "http://localhost:8000/get/key2"
+   ```
+
+3. **Check insights**:
+   ```bash
+   curl "http://localhost:8000/insights"
+   ```
 
 ## Deployment
 
