@@ -110,10 +110,36 @@
         src: ../../requirements.txt
         dest: /opt/server/
 
+    - name: Copy base database file
+      copy:
+        src: ../../data/kv_store.db
+        dest: /opt/server/base-kv_store.db
+      ignore_errors: yes
+
     - name: Create Docker volume for server data
       docker_volume:
-        name: kv-server-data
+        name: "kv-server-{{ inventory_hostname }}-data"
         driver: local
+
+    - name: Initialize database in volume
+      shell: |
+        docker run --rm \
+          -v kv-server-{{ inventory_hostname }}-data:/data \
+          -v /opt/server/base-kv_store.db:/base-kv_store.db \
+          alpine:latest sh -c "
+            if [ ! -f /data/kv_store.db ]; then
+              if [ -f /base-kv_store.db ]; then
+                cp /base-kv_store.db /data/kv_store.db
+                echo 'Copied base database for {{ inventory_hostname }}'
+              else
+                touch /data/kv_store.db
+                echo 'Created empty database for {{ inventory_hostname }}'
+              fi
+            else
+              echo 'Database already exists for {{ inventory_hostname }}'
+            fi
+          "
+      ignore_errors: yes
 
     - name: Build server image
       docker_image:
@@ -124,7 +150,7 @@
 
     - name: Stop existing server container
       docker_container:
-        name: kv-server
+        name: "kv-server-{{ inventory_hostname }}"
         state: absent
       ignore_errors: yes
 
@@ -145,12 +171,12 @@
 
     - name: Run server container
       docker_container:
-        name: kv-server
+        name: "kv-server-{{ inventory_hostname }}"
         image: kv-server
         ports:
           - "8080:8080"
         volumes:
-          - kv-server-data:/app/data
+          - "kv-server-{{ inventory_hostname }}-data:/app/data"
         restart_policy: unless-stopped
     
     - name: Install UFW

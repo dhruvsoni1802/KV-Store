@@ -10,10 +10,11 @@ services:
       - "8000:8000"
     depends_on:
       - server-1
+      - server-2
     restart: unless-stopped
     environment:
       - PYTHONUNBUFFERED=1
-      - BACKEND_SERVERS=server-1:8080
+      - BACKEND_SERVERS=server-1:8080,server-2:8080
     networks:
       - kv-store-network
 
@@ -24,12 +25,64 @@ services:
       dockerfile: server/Dockerfile
     # No ports exposed - only accessible through API Gateway
     volumes:
-      - ./data:/app/data
+      - ./data:/host-data
+      - server-1-data:/app/data
     restart: unless-stopped
     environment:
       - PYTHONUNBUFFERED=1
+      - SERVER_NAME=server-1
     networks:
       - kv-store-network
+    command: >
+      sh -c "
+        mkdir -p /host-data/$${SERVER_NAME} &&
+        if [ ! -f /host-data/$${SERVER_NAME}/kv_store.db ]; then
+          if [ -f /host-data/kv_store.db ]; then
+            cp /host-data/kv_store.db /host-data/$${SERVER_NAME}/kv_store.db
+            echo 'Copied base database for $${SERVER_NAME}'
+          else
+            echo 'Creating new empty database for $${SERVER_NAME}' &&
+            touch /host-data/$${SERVER_NAME}/kv_store.db
+          fi
+        fi &&
+        cp -r /host-data/$${SERVER_NAME}/* /app/data/ &&
+        echo 'Starting $${SERVER_NAME} with database: /app/data/kv_store.db' &&
+        python main.py
+      "
+  
+  server-2:
+    build:
+      context: .
+      dockerfile: server/Dockerfile
+    volumes:
+      - ./data:/host-data
+      - server-2-data:/app/data
+    restart: unless-stopped
+    environment:
+      - PYTHONUNBUFFERED=1
+      - SERVER_NAME=server-2
+    networks:
+      - kv-store-network
+    command: >
+      sh -c "
+        mkdir -p /host-data/$${SERVER_NAME} &&
+        if [ ! -f /host-data/$${SERVER_NAME}/kv_store.db ]; then
+          if [ -f /host-data/kv_store.db ]; then
+            cp /host-data/kv_store.db /host-data/$${SERVER_NAME}/kv_store.db
+            echo 'Copied base database for $${SERVER_NAME}'
+          else
+            echo 'Creating new empty database for $${SERVER_NAME}' &&
+            touch /host-data/$${SERVER_NAME}/kv_store.db
+          fi
+        fi &&
+        cp -r /host-data/$${SERVER_NAME}/* /app/data/ &&
+        echo 'Starting $${SERVER_NAME} with database: /app/data/kv_store.db' &&
+        python main.py
+      "
+
+volumes:
+  server-1-data:
+  server-2-data:
 
 networks:
   kv-store-network:

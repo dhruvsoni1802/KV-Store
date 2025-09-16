@@ -3,14 +3,14 @@ all:
     gateway:
       hosts:
         gateway-server:
-          ansible_host: PUBLIC IP
-          ansible_user: USERNAME
+          ansible_host: 152.7.178.254
+          ansible_user: dbsoni
     
     servers:
       hosts:
         server-1:
-          ansible_host: PUBLIC IP
-          ansible_user: USERNAME
+          ansible_host: 152.7.179.48
+          ansible_user: dbsoni
         server-2:
-          ansible_host: PUBLIC IP
-          ansible_user: USERNAME
+          ansible_host: 152.7.179.9
+          ansible_user: dbsoni

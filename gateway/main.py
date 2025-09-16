@@ -5,7 +5,7 @@ from fastapi.responses import JSONResponse
 import httpx
 import uvicorn
 import os
-import random
+from load_balancer import LoadBalancer
 
 app = FastAPI(
     title="API Gateway",
@@ -17,16 +17,31 @@ app = FastAPI(
 BACKEND_SERVERS = os.getenv("BACKEND_SERVERS", "localhost:8080").split(",")
 print(f"Backend servers configured: {BACKEND_SERVERS}")
 
-def get_backend_url():
-    """Get a random backend server URL for load balancing"""
-    server = random.choice(BACKEND_SERVERS).strip()
-    return f"http://{server}"
+# Create load balancer with consistent hashing
+load_balancer = LoadBalancer(BACKEND_SERVERS)
+
+@app.get("/servers")
+async def get_servers():
+    """Get list of available backend servers"""
+    return {
+        "servers": BACKEND_SERVERS,
+        "count": len(BACKEND_SERVERS)
+    }
 
 @app.api_route("/{path:path}", methods=["GET", "POST", "PUT", "DELETE"])
 async def forward_request(request: Request, path: str):    
-    # Build the full URL for the backend
-    backend_url = get_backend_url()
-    target_url = f"{backend_url}/{path}"
+    try:
+        # Check for server parameter in query params
+        server_param = request.query_params.get("server")
+        
+        # Build the full URL for the backend using consistent hashing
+        backend_url = load_balancer.get_backend_url(path, server_param)
+        target_url = f"{backend_url}/{path}"
+    except Exception as e:
+        raise HTTPException(status_code=503, detail=f"No servers available: {str(e)}")
+    
+    # Extract server name for response headers
+    server_name = backend_url.replace("http://", "")
 
     # Get all the request details
     method = request.method
@@ -50,16 +65,29 @@ async def forward_request(request: Request, path: str):
                 content=body
             )
             
-            # Forward the response back to the client
+            # Forward the response back to the client with server info
+            response_headers = dict(response.headers)
+            response_headers["X-Server-Used"] = server_name
+            
+            # Remove Content-Length header to let FastAPI calculate it
+            response_headers.pop("content-length", None)
+            
             if response.headers.get("content-type", "").startswith("application/json"):
+                json_content = response.json()
+                # Add server info to JSON response
+                if isinstance(json_content, dict):
+                    json_content["server_used"] = server_name
+                
                 return JSONResponse(
-                    content=response.json(),
-                    status_code=response.status_code
+                    content=json_content,
+                    status_code=response.status_code,
+                    headers=response_headers
                 )
             else:
                 return JSONResponse(
                     content=response.text,
-                    status_code=response.status_code
+                    status_code=response.status_code,
+                    headers=response_headers
                 )
             
     except httpx.ConnectError:

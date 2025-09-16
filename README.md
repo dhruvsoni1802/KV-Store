@@ -103,10 +103,15 @@ Data is stored in SQLite database at `./data/kv_store.db` and persists across co
 - `GET /get/{key}?version=N` - Get a specific version of a key
 
 ### Cache Operations
-- `GET /cache/stats` - Get cache statistics (size, max size, is full)
+- `GET /cache/stats?server={server_name}` - Get cache statistics from specific server (size, max size, is full)
 
 ### Database Operations
-- `GET /db/stats` - Get database statistics (total keys, versions, file size)
+- `GET /db/stats?server={server_name}` - Get database statistics from specific server (total keys, versions, file size)
+
+**Note**: The `server` parameter is mandatory for stats endpoints. Available servers: `server-1:8080`, `server-2:8080`
+
+### Server Information
+- `GET /servers` - Get list of available backend servers
 
 ### Interactive Documentation
 - `GET /docs` - Swagger UI for testing the API
@@ -127,11 +132,20 @@ curl "http://localhost:8000/get/mykey"
 # Get specific version through API Gateway
 curl "http://localhost:8000/get/mykey?version=1"
 
-# Check cache statistics through API Gateway
-curl "http://localhost:8000/cache/stats"
+# Get list of available servers
+curl "http://localhost:8000/servers"
 
-# Check database statistics through API Gateway
-curl "http://localhost:8000/db/stats"
+# Check cache statistics from server-1 through API Gateway
+curl "http://localhost:8000/cache/stats?server=server-1:8080"
+
+# Check cache statistics from server-2 through API Gateway
+curl "http://localhost:8000/cache/stats?server=server-2:8080"
+
+# Check database statistics from server-1 through API Gateway
+curl "http://localhost:8000/db/stats?server=server-1:8080"
+
+# Check database statistics from server-2 through API Gateway
+curl "http://localhost:8000/db/stats?server=server-2:8080"
 ```
 
 **Note: Backend server is not directly accessible. All requests must go through the API Gateway.**
